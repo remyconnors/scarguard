@@ -6,6 +6,14 @@ Named after Scar (aka Kroger), a survivor fish badly injured by a heron who live
 
 A containerized wildlife detection and notification system. Watches RTSP camera feeds for target species (herons, ducks, raccoons) and sends real-time notifications (Discord, email, webhooks) enabling downstream response to protect a backyard koi pond. ScarGuard handles detection, notification, and physical deterrence (sprinklers, lights, sirens via Tuya Cloud API). Works with any RTSP camera and any Docker host with an NVIDIA GPU.
 
+## Charter
+
+This workspace is software. The "What this is" / product
+scope above is the charter. Software authors don't touch
+infrastructure outside their charter — even with credentials
+available. For work that needs out-of-charter access, use a
+sanctioned cross-system channel.
+
 ## Tech Stack (Reference Setup)
 
 - **Compute:** NVIDIA Jetson Orin Nano, JetPack 6.2.1 (L4T 36.4.7) — any NVIDIA GPU host works
@@ -44,24 +52,10 @@ A containerized wildlife detection and notification system. Watches RTSP camera 
 
 ## Code Review Protocol
 
-After completing any non-trivial code change (new feature, bug fix, refactor), you MUST perform a self-review via subagent before considering the task done.
-
-### Mandatory Review Step
-1. Run `git diff HEAD` to capture all uncommitted changes
-2. Spawn a review subagent with this prompt:
-   > "Review the following diff for: correctness, error handling, consistency with the scarguard Python style (type hints, Pydantic models, structured logging), and any risks specific to a Jetson/Docker/RTSP environment. Be direct about issues. Diff: [paste diff]"
-3. Address any issues flagged before marking the task complete
-
-### When This Applies
-- Any changes to services/ (detector, web, notifier)
-- Any changes to shared/models.py
-- Any changes to docker-compose.yml or Dockerfiles
-- Config schema changes
-
-### When It Doesn't Apply
-- Documentation only changes
-- Comment/whitespace changes
-- Dependency bumps with no logic changes
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the mandatory self-review
+step that applies to any non-trivial code change. The full protocol
+lives there so human contributors hit it in the same place AI
+collaborators do.
 
 ## Linting & Type Checking
 
@@ -69,7 +63,7 @@ Run these before considering any code change done (mirrors CI exactly):
 
 ```bash
 # Ruff — all services (detector included; no GPU deps needed)
-ruff check services/detector/src services/web/src services/notifier/src services/deterrent/src shared
+ruff check services/detector/src services/web/src services/notifier/src services/deterrent/src services/backup/src shared
 
 # mypy — web (detector is excluded from CI: torch/opencv not available outside L4T)
 MYPYPATH=services/web/src:shared \
@@ -82,6 +76,10 @@ MYPYPATH=services/notifier/src:shared \
 # mypy — deterrent
 MYPYPATH=services/deterrent/src:shared \
   python3 -m mypy services/deterrent/src shared --ignore-missing-imports --explicit-package-bases
+
+# mypy — backup (v1.14+ SQLite backup sidecar)
+MYPYPATH=services/backup/src:shared \
+  python3 -m mypy services/backup/src shared --ignore-missing-imports --explicit-package-bases
 ```
 
 Required packages (if not already installed): `pip install ruff mypy types-PyYAML types-requests types-redis`
