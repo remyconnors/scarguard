@@ -48,6 +48,7 @@
     <tr>
       <th>Time</th>
       <th>Class</th>
+      <th>Species</th>
       <th>Conf</th>
       <th>Camera</th>
       <th>Actions</th>
@@ -79,6 +80,39 @@
 <script src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js" defer></script>
 <script>
 var SCARGUARD_TARGET_CLASSES = {{ target_classes | tojson | safe }};
+
+// Species classification arrives asynchronously (60-180s after detection).
+// htmx-ext-sse is already managing the EventSource for `detection` events —
+// we hook into its `htmx:sseBeforeMessage` event so a single connection
+// handles both the htmx-driven row insert and our manual species cell patch.
+document.addEventListener('htmx:sseBeforeMessage', function(ev) {
+  var msg = ev.detail && ev.detail.event;
+  if (!msg || msg.type !== 'species') return;
+  // Don't let htmx try to swap this — its sse-swap is "detection" only,
+  // but stopping propagation defensively keeps any future named-handler
+  // additions from double-processing.
+  ev.stopPropagation();
+  try {
+    var data = JSON.parse(msg.data);
+    var token = data.feedback_token;
+    if (!token) return;
+    var row = document.querySelector('tr[data-token="' + CSS.escape(token) + '"]');
+    if (!row) return;
+    var cell = row.querySelector('.species-cell');
+    if (!cell) return;
+    var name = data.common_name || data.species || '—';
+    var pct = (data.score != null) ? Math.round(data.score * 100) + '%' : '';
+    var geofencedCls = data.geofenced ? ' species-geofenced' : '';
+    var title = (data.species || '') + (data.geofenced ? ' (rolled up by geofence)' : '');
+    cell.innerHTML =
+      '<span class="species-label' + geofencedCls + '" title="' + _escHtml(title) + '">' +
+        _escHtml(name) +
+        (pct ? ' <span class="muted">(' + pct + ')</span>' : '') +
+      '</span>';
+  } catch (err) {
+    console.warn('Failed to handle species event', err);
+  }
+});
 
 // Snapshot overlay with bbox rendering and inline feedback
 document.addEventListener('click', function(e) {

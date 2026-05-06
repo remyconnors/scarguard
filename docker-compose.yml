@@ -214,6 +214,7 @@ services:
       DB_PATH: /data/scarguard.db
       AUTH_DB_PATH: /data/auth.db
       DETERRENT_DB_PATH: /data/deterrent.db
+      SPECIES_DB_PATH: /data/speciesnet.db
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       DETECTION_HMAC_KEY: ${DETECTION_HMAC_KEY:-}
     healthcheck:
@@ -334,6 +335,54 @@ services:
       - SETGID
     # Deterrent doesn't write anywhere except /data (SQLite) and /tmp
     # (healthcheck sentinel).
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+
+  # ── Species classifier (sidecar) ──────────────────────────────────────────
+  # Optional: forwards bird detections to an external SpeciesNet classifier
+  # (typically the AWS Lambda described in docs/SPECIESNET.md) and writes the
+  # results back to /data/speciesnet.db.  Disabled by default — opt-in via
+  # speciesnet.enabled in scarguard.yml.  Mounting /data:rw is required so
+  # the service can write its sidecar DB; snapshots are read from the same
+  # volume.
+  speciesnet:
+    build:
+      context: .
+      dockerfile: services/speciesnet/Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-sentania-labs}/scarguard-speciesnet:${IMAGE_TAG:-latest}
+    environment:
+      CONFIG_PATH: /config/scarguard.yml
+      SPECIES_DB_PATH: /data/speciesnet.db
+      SNAPSHOT_DIR: /data/snapshots
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      DETECTION_HMAC_KEY: ${DETECTION_HMAC_KEY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/healthy -mmin -1 | grep -q ."]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    volumes:
+      - scarguard-config:/config:ro
+      - scarguard-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
     read_only: true
     tmpfs:
       - /tmp:size=64m

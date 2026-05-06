@@ -137,6 +137,24 @@ notifications:
 redis:
   host: redis
   port: 6379
+
+# Optional: external species classifier (SpeciesNet) integration.
+# When enabled, the speciesnet sidecar service crops each qualifying
+# detection's bbox out of its snapshot and POSTs it to the configured
+# HTTP API (reference deployment: the AWS Lambda described in
+# docs/SPECIESNET.md). The result is persisted to /data/speciesnet.db
+# and surfaced on the events page in a new "Species" column.
+speciesnet:
+  enabled: false
+  api_url: ""                 # e.g. https://abc.execute-api.us-east-1.amazonaws.com
+  api_token: ""               # optional Bearer for protected APIs (redacted from viewer role)
+  trigger_classes: ["bird"]   # YOLO classes that should be classified; empty = all
+  min_confidence: 0.40        # skip detections below this confidence
+  timeout_seconds: 15         # per-HTTP-call timeout
+  poll_interval_seconds: 3    # gap between /result polls
+  max_polls: 60               # ≈ 3 minutes total before timing out
+  bbox_padding_pct: 0.10      # margin around the bbox crop (0–1)
+  max_concurrent: 4           # worker pool size
 ```
 
 ## Detection Logic
@@ -209,6 +227,28 @@ Labeled events power the training pipeline:
 | `ram_total_mb` | INTEGER | Total RAM in MB |
 | `camera_data` | TEXT | JSON per-camera FPS/latency |
 
+### Database Tables: species_classifications (separate DB)
+
+Owned by the optional `speciesnet` sidecar — lives in
+`/data/speciesnet.db`, joined to `detection_events` via
+`feedback_token`. See `docs/SPECIESNET.md`.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER | Primary key |
+| `feedback_token` | TEXT | Unique — matches `detection_events.feedback_token` |
+| `camera_name` | TEXT | Copied from the detection event for filtering convenience |
+| `detection_class` | TEXT | YOLO class that triggered classification |
+| `status` | TEXT | `pending` / `success` / `timeout` / `error` |
+| `common_name` | TEXT | English name of the top-1 prediction (e.g. `American Crow`) |
+| `species` | TEXT | Binomial name (e.g. `Corvus brachyrhynchos`) |
+| `genus` / `family` / `order` / `class` | TEXT | Taxonomic context |
+| `score` | REAL | Top-1 prediction confidence (0–1) |
+| `geofenced` | INTEGER | `1` if the prediction was rolled up to satisfy the geofence |
+| `top_predictions` | TEXT | JSON — top-5 raw response for debugging |
+| `error` | TEXT | Failure detail when status is `timeout` or `error` |
+| `created_at` / `completed_at` | TEXT | ISO 8601 UTC |
+
 ### Database Tables: app_state
 
 | Column | Type | Description |
@@ -260,6 +300,7 @@ backups-diff view:
 - `notifications.channels[].password` — ntfy Basic auth password
 - `notifications.channels[].headers` — custom HTTP headers (may carry auth)
 - `deterrent.tuya.api_key` / `deterrent.tuya.api_secret` — Tuya Cloud API credentials
+- `speciesnet.api_token` — Bearer token for the external SpeciesNet HTTP API
 
 The raw-YAML tab (`GET /config/raw`) is admin-only and returns 403 for
 viewers, because there's no lossless way to redact arbitrary YAML while

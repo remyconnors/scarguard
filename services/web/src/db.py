@@ -66,7 +66,7 @@ def get_events(
             f"""
             SELECT id, timestamp, class_name, confidence, camera_name,
                    snapshot_path, actions_triggered, bbox, frame_size,
-                   feedback, corrected_class
+                   feedback, corrected_class, feedback_token
             FROM detection_events
             {clause}
             ORDER BY id DESC

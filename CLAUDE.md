@@ -63,7 +63,7 @@ Run these before considering any code change done (mirrors CI exactly):
 
 ```bash
 # Ruff — all services (detector included; no GPU deps needed)
-ruff check services/detector/src services/web/src services/notifier/src services/deterrent/src services/backup/src shared
+ruff check services/detector/src services/web/src services/notifier/src services/deterrent/src services/speciesnet/src services/backup/src shared
 
 # mypy — web (detector is excluded from CI: torch/opencv not available outside L4T)
 MYPYPATH=services/web/src:shared \
@@ -80,6 +80,10 @@ MYPYPATH=services/deterrent/src:shared \
 # mypy — backup (v1.14+ SQLite backup sidecar)
 MYPYPATH=services/backup/src:shared \
   python3 -m mypy services/backup/src shared --ignore-missing-imports --explicit-package-bases
+
+# mypy — speciesnet
+MYPYPATH=services/speciesnet/src:shared \
+  python3 -m mypy services/speciesnet/src shared --ignore-missing-imports --explicit-package-bases
 ```
 
 Required packages (if not already installed): `pip install ruff mypy types-PyYAML types-requests types-redis`

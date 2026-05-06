@@ -37,6 +37,7 @@ jobs:
             services/web/src \
             services/notifier/src \
             services/deterrent/src \
+            services/speciesnet/src \
             services/log-streamer/src \
             shared
 
@@ -60,7 +61,8 @@ jobs:
           pip install mypy types-PyYAML types-requests \
             -r services/web/requirements.txt \
             -r services/notifier/requirements.txt \
-            -r services/deterrent/requirements.txt
+            -r services/deterrent/requirements.txt \
+            -r services/speciesnet/requirements.txt
 
       - name: mypy — web
         env:
@@ -83,6 +85,14 @@ jobs:
           MYPYPATH: services/deterrent/src:shared
         run: |
           mypy services/deterrent/src shared \
+            --ignore-missing-imports \
+            --explicit-package-bases
+
+      - name: mypy — speciesnet
+        env:
+          MYPYPATH: services/speciesnet/src:shared
+        run: |
+          mypy services/speciesnet/src shared \
             --ignore-missing-imports \
             --explicit-package-bases
 
@@ -148,3 +158,24 @@ jobs:
         env:
           PYTHONPATH: services/deterrent/src:shared
         run: pytest services/deterrent/tests/ -v
+
+  # ── Tests — speciesnet ──────────────────────────────────────────────────────
+  test-speciesnet:
+    name: Tests — speciesnet
+    runs-on: [self-hosted, linux, generic]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.owner.login == 'sentania-labs'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r services/speciesnet/requirements.txt pytest
+
+      - name: pytest
+        env:
+          PYTHONPATH: services/speciesnet/src:shared
+        run: pytest services/speciesnet/tests/ -v
