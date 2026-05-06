@@ -1003,3 +1003,10 @@ body.expert-mode details.expert-only { display: block !important; }
   list-style: none;
   padding: 0;
 }
+
+/* Species classification cell (events page) */
+.species-cell { font-size: 0.85rem; }
+.species-label { color: var(--ok, #3ecf8e); font-weight: 500; }
+.species-label.species-geofenced { color: var(--warn, #f5a623); }
+.species-pending { font-style: italic; }
+.species-error { color: var(--danger, #e05c5c); font-style: italic; }

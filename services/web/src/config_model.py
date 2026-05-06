@@ -375,6 +375,62 @@ class ActuationConfig(BaseModel):
     battery_monitor: DeterrentBatteryMonitorConfig = DeterrentBatteryMonitorConfig()
 
 
+class SpeciesNetConfig(BaseModel):
+    """Settings for the optional SpeciesNet species classifier sidecar.
+
+    The sidecar service subscribes to detection events, crops the bbox,
+    and sends it to an external classifier (typically the AWS Lambda
+    deployment described in ``docs/SPECIESNET.md``).  Disabled by default
+    — enabling requires both ``enabled: true`` and a valid ``api_url``.
+    """
+
+    enabled: bool = False
+    api_url: str = ""
+    api_token: str = ""
+    timeout_seconds: float = 15.0
+    poll_interval_seconds: float = 3.0
+    max_polls: int = 60
+    bbox_padding_pct: float = 0.10
+    min_confidence: float = 0.40
+    trigger_classes: list[str] = ["bird"]
+    max_concurrent: int = 4
+
+    @field_validator("api_url")
+    @classmethod
+    def api_url_format(cls, v: str) -> str:
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("api_url must start with http:// or https://")
+        return v
+
+    @field_validator("bbox_padding_pct")
+    @classmethod
+    def padding_range(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("bbox_padding_pct must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("min_confidence")
+    @classmethod
+    def conf_range(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("min_confidence must be between 0.0 and 1.0")
+        return v
+
+    @field_validator("max_polls")
+    @classmethod
+    def max_polls_range(cls, v: int) -> int:
+        if not 1 <= v <= 600:
+            raise ValueError("max_polls must be between 1 and 600")
+        return v
+
+    @field_validator("max_concurrent")
+    @classmethod
+    def max_concurrent_range(cls, v: int) -> int:
+        if not 1 <= v <= 32:
+            raise ValueError("max_concurrent must be between 1 and 32")
+        return v
+
+
 class StructuredConfigPayload(BaseModel):
     """Subset of scarguard.yml written by the structured form editor.
 
@@ -388,3 +444,4 @@ class StructuredConfigPayload(BaseModel):
     notifications: NotificationsConfig = NotificationsConfig()
     tls: TLSConfig = TLSConfig()
     deterrent: ActuationConfig = ActuationConfig()
+    speciesnet: SpeciesNetConfig = SpeciesNetConfig()

@@ -392,9 +392,20 @@ the same patch — see GitHub.
 
 ---
 
-## v1.15 — exclusion zone editor + label-correction tooling (planned)
+## v1.15 — exclusion zone editor + label-correction tooling + species classifier (planned)
 
 Feature work, not hardening — bumps the minor.
+
+0. **SpeciesNet species classifier sidecar.** New `speciesnet` Docker
+   Compose service that forwards bird detections to an external
+   SpeciesNet HTTP API (reference deployment: AWS Lambda with the
+   cropped SpeciesNet 4.0.2a model + USA geofencing), polls for the
+   async result, and writes the classification to a sidecar SQLite DB
+   (`/data/speciesnet.db`). The events page gains a Species column
+   that live-updates via the new `scarguard:species` SSE channel.
+   Opt-in via `speciesnet.enabled`; HMAC-verified inputs and
+   SSRF-validated outbound URLs. Closes the "what *kind* of bird"
+   question that a generic COCO YOLO can't answer.
 
 1. **Polygon exclusion zones with edit affordance.** Replace the
    rect-only zone tool with a polygon canvas tool, support editing

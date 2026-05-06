@@ -27,6 +27,7 @@ _STRUCTURAL_PATHS: tuple[tuple[str, ...], ...] = (
     ("cameras", "[]", "rtsp_url"),
     ("deterrent", "tuya", "api_key"),
     ("deterrent", "tuya", "api_secret"),
+    ("speciesnet", "api_token"),
 )
 
 # Field-name heuristic for the heterogeneous `notifications.channels` list

@@ -65,6 +65,7 @@
 - **Chip-autocomplete for all registry references (v0.13.4):** Token/chip input replaces comma-list text fields for channel refs, group refs, and class names. Class-name fields autocomplete against the selected model's embedded `.names` via a new Redis-RPC detector endpoint; unknown chips render in warning colour so typos are visible instead of silent.
 - **Model class introspection (v0.13.4):** `/models` admin page grew a Classes column — expand any model to see its full embedded class list as chips, copy-to-clipboard. Backed by `/models/{filename}/classes`. TensorRT `.engine` files without embedded names return a warning pointing at the source `.pt`.
 - **Orphan-reference soft-warn (v0.13.4):** Save succeeds, response includes a `warnings` list for any rule or summary-report reference that doesn't resolve to a defined channel or group. Applies to both structured-form saves and raw-YAML edits.
+- **SpeciesNet species classification sidecar (in progress):** Optional `speciesnet` service forwards bird detections (configurable `trigger_classes` + `min_confidence`) to an external SpeciesNet HTTP API, persists results to `/data/speciesnet.db`, and surfaces the species + confidence on the events page (live-patched via the `scarguard:species` SSE channel). HMAC-verified inputs, SSRF-validated outbound URLs, opt-in via `speciesnet.enabled` in `scarguard.yml`. See `docs/SPECIESNET.md`.
 
 ## Known Issues / Buggy
 

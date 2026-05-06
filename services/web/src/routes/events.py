@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import config_store
 import db
 import redis.asyncio as aioredis
+import species_db
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -17,6 +18,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 
 PAGE_SIZE = 50
 CHANNEL = "scarguard:detections"
+SPECIES_CHANNEL = "scarguard:species"
 
 
 def _to_local(iso_str: str, tz_name: str) -> str:
@@ -51,6 +53,21 @@ def _apply_display_timestamp(events: list[dict]) -> list[dict]:
     return events
 
 
+def _attach_species(events: list[dict]) -> list[dict]:
+    """Annotate each event with a ``species`` dict from the speciesnet DB.
+
+    Events without a feedback_token, or whose classification is missing
+    (sidecar disabled, sidecar not yet run, or the row was pruned), get
+    ``species: None``.  The template treats that as "no classification".
+    """
+    tokens = [e["feedback_token"] for e in events if e.get("feedback_token")]
+    rows = species_db.get_by_tokens(tokens) if tokens else {}
+    for e in events:
+        token = e.get("feedback_token")
+        e["species"] = rows.get(token) if token else None
+    return events
+
+
 def _get_camera_names() -> list[str]:
     """Return distinct camera names from the DB for the filter dropdown."""
     try:
@@ -82,7 +99,7 @@ async def events_page(
     fb = feedback or None
     rows = db.get_events(limit=PAGE_SIZE, offset=offset, camera=cam, class_name=cls, date_from=dfrom, date_to=dto, feedback=fb)
     total = db.count_events(camera=cam, class_name=cls, date_from=dfrom, date_to=dto, feedback=fb)
-    events = _apply_display_timestamp([dict(r) for r in rows])
+    events = _attach_species(_apply_display_timestamp([dict(r) for r in rows]))
     return templates.TemplateResponse(
         request,
         "events.html",
@@ -118,7 +135,7 @@ async def event_rows(
         camera=camera or None, class_name=class_name or None,
         date_from=date_from or None, date_to=date_to or None,
     )
-    events = _apply_display_timestamp([dict(r) for r in rows])
+    events = _attach_species(_apply_display_timestamp([dict(r) for r in rows]))
     return templates.TemplateResponse(
         request,
         "partials/event_rows.html",
@@ -148,8 +165,8 @@ async def submit_feedback(
         # Refuse to store wrong_class without an actual corrected class
         row = db.get_event(event_id)
         if row is None:
-            return HTMLResponse("<tr><td colspan='7'>Event not found</td></tr>")
-        events = _apply_display_timestamp([dict(row)])
+            return HTMLResponse("<tr><td colspan='8'>Event not found</td></tr>")
+        events = _attach_species(_apply_display_timestamp([dict(row)]))
         return templates.TemplateResponse(
             request,
             "partials/event_rows.html",
@@ -158,9 +175,8 @@ async def submit_feedback(
     db.update_feedback(event_id, feedback, corr)
     row = db.get_event(event_id)
     if row is None:
-        return HTMLResponse("<tr><td colspan='7'>Event not found</td></tr>")
-    event = dict(row)
-    events = _apply_display_timestamp([event])
+        return HTMLResponse("<tr><td colspan='8'>Event not found</td></tr>")
+    events = _attach_species(_apply_display_timestamp([dict(row)]))
     return templates.TemplateResponse(
         request,
         "partials/event_rows.html",
@@ -179,7 +195,7 @@ async def event_stream(request: Request):
     async def generator():
         client = aioredis.Redis(host=host, port=port, password=os.environ.get("REDIS_PASSWORD", "") or None, decode_responses=True)
         pubsub = client.pubsub()
-        await pubsub.subscribe(CHANNEL)
+        await pubsub.subscribe(CHANNEL, SPECIES_CHANNEL)
         yield ": connected\n\n"
         try:
             while not await request.is_disconnected():
@@ -195,11 +211,15 @@ async def event_stream(request: Request):
                     event = json.loads(message["data"])
                 except json.JSONDecodeError:
                     continue
+                channel = message.get("channel", "")
+                if channel == SPECIES_CHANNEL:
+                    yield f"event: species\ndata: {json.dumps(_species_patch(event))}\n\n"
+                    continue
                 tz = _tz_name()
                 html = _render_event_row(event, tz)
                 yield f"event: detection\ndata: {html}\n\n"
         finally:
-            await pubsub.unsubscribe(CHANNEL)
+            await pubsub.unsubscribe(CHANNEL, SPECIES_CHANNEL)
             await client.aclose()
 
     return StreamingResponse(generator(), media_type="text/event-stream")
@@ -209,6 +229,7 @@ def _render_event_row(event: dict, tz_name: str = "UTC") -> str:
     snap = event.get("snapshot_path")
     bbox = event.get("bbox")
     frame_size = event.get("frame_size")
+    feedback_token = event.get("feedback_token", "")
     snap_html = ""
     if snap:
         fname = _html.escape(Path(snap).name)
@@ -232,12 +253,21 @@ def _render_event_row(event: dict, tz_name: str = "UTC") -> str:
         if actions
         else "\u2014"
     )
+    # SSE-pushed detections start with no species (sidecar will publish later
+    # on scarguard:species).  The cell carries the feedback_token so the
+    # client-side handler can locate the row when the patch arrives.
+    species_html = (
+        f'<span class="species-pending muted" data-token="{_html.escape(feedback_token)}">'
+        f"\u2014</span>"
+    )
     # New events from SSE have no feedback yet
     feedback_html = '<span class="muted">\u2014</span>'
     return (
-        f'<tr id="event-live" class="event-unreviewed">'
+        f'<tr id="event-live" data-token="{_html.escape(feedback_token)}" '
+        f'class="event-unreviewed">'
         f"<td>{display_ts}</td>"
         f'<td>{_html.escape(event.get("class_name", "").replace("_", " ").title())}</td>'
+        f'<td class="species-cell">{species_html}</td>'
         f"<td>{conf:.0%}</td>"
         f'<td>{_html.escape(event.get("camera_name", ""))}</td>'
         f'<td class="actions-cell">{actions_html}</td>'
@@ -245,6 +275,22 @@ def _render_event_row(event: dict, tz_name: str = "UTC") -> str:
         f'<td class="feedback-cell">{feedback_html}</td>'
         f"</tr>"
     )
+
+
+def _species_patch(payload: dict) -> dict:
+    """Reduce a scarguard:species payload to the fields the browser needs.
+
+    The full payload includes elapsed time and timestamps that don't
+    affect the rendered cell \u2014 we only need token + label + score so the
+    SSE event stays small.
+    """
+    return {
+        "feedback_token": payload.get("feedback_token", ""),
+        "common_name": payload.get("common_name", ""),
+        "species": payload.get("species", ""),
+        "score": payload.get("score"),
+        "geofenced": bool(payload.get("geofenced", False)),
+    }
 
 
 @router.get("/visits", response_class=HTMLResponse)

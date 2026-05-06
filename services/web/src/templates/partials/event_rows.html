@@ -1,7 +1,24 @@
 {% for e in events %}
-<tr id="event-row-{{ e.id }}" class="{{ '' if e.feedback else 'event-unreviewed' }}">
+<tr id="event-row-{{ e.id }}" data-token="{{ e.feedback_token or '' }}"
+    class="{{ '' if e.feedback else 'event-unreviewed' }}">
   <td>{{ e.display_timestamp }}</td>
   <td>{{ e.class_name.replace("_", " ").title() }}</td>
+  <td class="species-cell">
+    {% if e.species and e.species.status == 'success' %}
+      {% set name = e.species.common_name or e.species.species %}
+      <span class="species-label{% if e.species.geofenced %} species-geofenced{% endif %}"
+            title="{{ e.species.species or '' }}{% if e.species.geofenced %} (rolled up by geofence){% endif %}">
+        {{ name or '—' }}
+        {% if e.species.score %}<span class="muted">({{ "%.0f%%"|format(e.species.score * 100) }})</span>{% endif %}
+      </span>
+    {% elif e.species and e.species.status == 'pending' %}
+      <span class="species-pending muted" data-token="{{ e.feedback_token or '' }}">classifying…</span>
+    {% elif e.species and e.species.status in ('error', 'timeout') %}
+      <span class="species-error muted" title="{{ e.species.error or e.species.status }}">{{ e.species.status }}</span>
+    {% else %}
+      <span class="species-pending muted" data-token="{{ e.feedback_token or '' }}">—</span>
+    {% endif %}
+  </td>
   <td>{{ "%.0f%%"|format(e.confidence * 100) }}</td>
   <td>{{ e.camera_name }}</td>
   <td class="actions-cell">
@@ -83,5 +100,5 @@
   </td>
 </tr>
 {% else %}
-<tr><td colspan="7" class="muted">No events yet.</td></tr>
+<tr><td colspan="8" class="muted">No events yet.</td></tr>
 {% endfor %}

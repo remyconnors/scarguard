@@ -55,7 +55,7 @@ These must pass before submitting a PR (mirrors CI):
 
 ```bash
 # Ruff — all services
-ruff check services/detector/src services/web/src services/notifier/src services/deterrent/src services/backup/src shared
+ruff check services/detector/src services/web/src services/notifier/src services/deterrent/src services/speciesnet/src services/backup/src shared
 
 # mypy — web
 MYPYPATH=services/web/src:shared \
@@ -72,6 +72,10 @@ MYPYPATH=services/deterrent/src:shared \
 # mypy — backup
 MYPYPATH=services/backup/src:shared \
   python3 -m mypy services/backup/src shared --ignore-missing-imports --explicit-package-bases
+
+# mypy — speciesnet
+MYPYPATH=services/speciesnet/src:shared \
+  python3 -m mypy services/speciesnet/src shared --ignore-missing-imports --explicit-package-bases
 ```
 
 ### Self-Review Protocol (AI-assisted changes)
